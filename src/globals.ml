@@ -86,6 +86,8 @@ let rootsList() = !theroots
 
 let rootsInCanonicalOrder() = Common.sortRoots (!theroots)
 
+let localRoot () = List.hd (rootsInCanonicalOrder ())
+
 let reorderCanonicalListToUsersOrder l =
   if rootsList() = rootsInCanonicalOrder() then l
   else Safelist.rev l
@@ -287,3 +289,18 @@ let someHostIsRunningWindows =
 
 let allHostsAreRunningWindows =
   Prefs.createBool "allHostsAreRunningWindows" false "*" ""
+
+let fatFilesystem =
+  Prefs.createBool "fat" ~local:true false
+    "use appropriate options for FAT filesystems"
+    ("When this is set to {\\tt true}, Unison will use appropriate options \
+      to synchronize efficiently and without error a replica located on a \
+      FAT filesystem on a non-Windows machine: \
+      do not synchronize permissions ({\\tt perms = 0}); \
+      never use chmod ({\tt dontchmod = true}); \
+      treat filenames as case insensitive ({\\tt ignorecase = true}); \
+      do not attempt to synchronize symbolic links ({\\tt links = false}); \
+      ignore inode number changes when detecting updates \
+      ({\\tt ignoreinodenumbers = true}).  \
+      Any of these change can be overridden by explicitely setting \
+      the corresponding preference in the profile.")

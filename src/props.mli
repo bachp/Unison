@@ -29,6 +29,8 @@ val fileSafe : t
 val dirDefault : t
 
 val syncModtimes : bool Prefs.t
+val permMask : int Prefs.t
+val dontChmod : bool Prefs.t
 
 (* We are reusing the directory length to store a flag indicating that
    the directory is unchanged *)
@@ -39,4 +41,4 @@ val setDirChangeFlag : t -> dirChangedStamp -> int -> t * bool
 val dirMarkedUnchanged : t -> dirChangedStamp -> int -> bool
 
 val validatePrefs: unit -> unit
-  
+

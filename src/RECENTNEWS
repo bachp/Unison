@@ -1,10 +1,10 @@
-CHANGES FROM VERSION 2.40.1
+CHANGES FROM VERSION 2.40.16
 
-* Update documentation in preparation for beta-release
-
+Move old 2.40 branch aside to make room for a new beta version with
+same major number
 -------------------------------
-CHANGES FROM VERSION 2.40.1
+CHANGES FROM VERSION 2.40.16
 
-* Update documentation in preparation for beta-release
+Update documentation
 
 -------------------------------

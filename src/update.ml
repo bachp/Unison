@@ -273,55 +273,6 @@ let (archiveNameOnRoot
           Os.myCanonicalHostName,
           System.file_exists (Os.fileInUnisonDir name)))
 
-let compatibleCaseMode magic =
-  if magic = "" then `YES else
-  try
-    let archMode = String.sub magic 0 (String.index magic '\000') in
-    let curMode = (Case.ops ())#modeDesc in
-    if curMode <> archMode then
-      `NO (curMode, archMode)
-    else
-      `YES
-  with Not_found ->
-    if (Case.ops ())#mode = Case.UnicodeInsensitive then
-      let curMode = (Case.ops ())#modeDesc in
-      `NO (curMode, "some non-Unicode")
-    else
-      `YES
-
-let checkArchiveCaseSensitivity l =
-  let error curMode archMode =
-          (* We cannot compute the archive name locally as it
-             currently depends on the os type *)
-    Globals.allRootsMap
-      (fun r -> archiveNameOnRoot r MainArch) >>= fun names ->
-    let l =
-      List.map
-        (fun (name, host, _) ->
-           Format.sprintf "    archive %s on host %s" name host)
-        names
-    in
-    Lwt.fail
-      (Util.Fatal
-         (String.concat "\n"
-            ("Warning: incompatible case sensitivity settings." ::
-              Format.sprintf "Unison is currently in %s mode," curMode ::
-              Format.sprintf
-                "while the archives were created in %s mode." archMode ::
-              "You should either change Unison's setup or delete" ::
-              "the following archives from the .unison directories:" ::
-              l @
-              ["(or invoke Unison once with -ignorearchives flag).";
-               "Then, try again."])))
-  in
-  match l with
-    Some (_, magic) :: _ ->
-      begin match compatibleCaseMode magic with
-        `NO (curMode, archMode) -> error curMode archMode
-      | `YES                    -> Lwt.return ()
-      end
-  | _ ->
-      Lwt.return ()
 
 (*****************************************************************************)
 (*                      LOADING AND SAVING ARCHIVES                          *)
@@ -578,6 +529,134 @@ let dumpArchiveLocal (fspath,()) =
 let dumpArchiveOnRoot : Common.root -> unit -> unit Lwt.t =
   Remote.registerRootCmd "dumpArchive" dumpArchiveLocal
 
+(*****************************************************************************)
+(*                          ARCHIVE CASE CONVERSION                          *)
+(*****************************************************************************)
+
+(* Stamp for marking unchange directories *)
+let dirStampKey : Props.dirChangedStamp Proplist.key =
+  Proplist.register "unchanged directory stamp"
+
+(* Property containing a description of the archive case sensitivity mode *)
+let caseKey : string Proplist.key = Proplist.register "case mode"
+
+(* Turn a case sensitive archive into a case insensitive archive.
+   Directory children are resorted and duplicates are removed.
+*)
+let rec makeCaseSensitiveRec arch =
+  match arch with
+    ArchiveDir (desc, children) ->
+      let dups = ref [] in
+      let children =
+        NameMap.fold
+          (fun nm ch chs ->
+             if Name.badEncoding nm then chs else begin
+               if NameMap.mem nm chs then dups := nm :: !dups;
+               NameMap.add nm (makeCaseSensitiveRec ch) chs
+             end)
+          children NameMap.empty
+      in
+      let children =
+        List.fold_left (fun chs nm -> NameMap.remove nm chs) children !dups in
+      ArchiveDir (desc, children)
+  | ArchiveFile _ | ArchiveSymlink _ | NoArchive ->
+      arch
+
+let makeCaseSensitive thisRoot =
+  setArchiveLocal thisRoot (makeCaseSensitiveRec (getArchive thisRoot));
+  (* We need to recheck all directories, so we mark them possibly changed *)
+  setArchivePropsLocal thisRoot
+    (Proplist.add dirStampKey (Props.freshDirStamp ())
+       (Proplist.add caseKey (Case.ops ())#modeDesc
+          (getArchiveProps thisRoot)))
+
+let makeCaseSensitiveOnRoot =
+  Remote.registerRootCmd "makeCaseSensitive"
+    (fun (fspath, ()) ->
+       makeCaseSensitive (thisRootsGlobalName fspath);
+       Lwt.return ())
+
+(*FIX: remove when Unison version > 2.40 *)
+let canMakeCaseSensitive () =
+  Globals.allRootsMap (fun r -> Remote.commandAvailable r "makeCaseSensitive")
+    >>= fun l ->
+  Lwt.return (List.for_all (fun x -> x) l)
+
+(****)
+
+(* Get the archive case sensitivity mode from the archive magic. *)
+let archiveMode magic =
+  let currentMode = (Case.ops ())#modeDesc in
+  if magic = "" then currentMode (* Newly created archive *) else
+  try
+    String.sub magic 0 (String.index magic '\000')
+  with Not_found ->
+    (* Legacy format.  Cannot be Unicode case insensitive. *)
+    if (Case.ops ())#mode = Case.UnicodeInsensitive then
+      "some non-Unicode"
+    else
+      currentMode
+
+let checkArchiveCaseSensitivity l =
+  let root = thisRootsGlobalName (snd (Globals.localRoot ())) in
+  let curMode = (Case.ops ())#modeDesc in
+  let archMode = Proplist.find caseKey (getArchiveProps root) in
+  if curMode = archMode then
+    Lwt.return ()
+  else begin
+    begin if archMode = Case.caseSensitiveModeDesc then
+      canMakeCaseSensitive ()
+    else
+      Lwt.return false
+    end >>= fun convert ->
+    if convert then
+      Globals.allRootsIter (fun r -> makeCaseSensitiveOnRoot r ())
+    else begin
+      (* We cannot compute the archive name locally as it
+         currently depends on the os type *)
+      Globals.allRootsMap
+        (fun r -> archiveNameOnRoot r MainArch) >>= fun names ->
+      let l =
+        List.map
+          (fun (name, host, _) ->
+             Format.sprintf "    archive %s on host %s" name host)
+          names
+      in
+      Lwt.fail
+        (Util.Fatal
+           (String.concat "\n"
+              ("Warning: incompatible case sensitivity settings." ::
+                Format.sprintf "Unison is currently in %s mode," curMode ::
+                Format.sprintf
+                  "while the archives were created in %s mode." archMode ::
+                "You should either change Unison's setup or delete" ::
+                "the following archives from the .unison directories:" ::
+                l @
+                ["(or invoke Unison once with -ignorearchives flag).";
+                 "Then, try again."])))
+    end
+  end
+
+(****)
+
+let rec populateCacheFromArchiveRec path arch =
+  match arch with
+    ArchiveDir (_, children) ->
+      NameMap.iter
+        (fun nm ch -> populateCacheFromArchiveRec (Path.child path nm) ch)
+        children
+  | ArchiveFile (desc, dig, stamp, ress) ->
+      Fpcache.save path (desc, dig, stamp, ress)
+  | ArchiveSymlink _ | NoArchive ->
+      ()
+
+let populateCacheFromArchive fspath arch =
+  let (cacheFilename, _) = archiveName fspath FPCache in
+  let cacheFile = Os.fileInUnisonDir cacheFilename in
+  Fpcache.init true cacheFile;
+  populateCacheFromArchiveRec Path.empty arch;
+  Fpcache.finish ()
+
 (*************************************************************************)
 (*                         Loading archives                              *)
 (*************************************************************************)
@@ -591,33 +670,20 @@ let ignoreArchives =
      ^ "not a good idea to set this option in a profile: it is intended for "
      ^ "command-line use.")
 
-let rec populateCacheFromArchive path arch =
-  match arch with
-    ArchiveDir (_, children) ->
-      NameMap.iter
-        (fun nm ch -> populateCacheFromArchive (Path.child path nm) ch)
-        children
-  | ArchiveFile (desc, dig, stamp, ress) ->
-      Fpcache.save path (desc, dig, stamp, ress)
-  | ArchiveSymlink _ | NoArchive ->
-      ()
-
 let setArchiveData thisRoot fspath (arch, hash, magic, properties) info =
+  let archMode = archiveMode magic in
+  let curMode = (Case.ops ())#modeDesc in
+  let properties = Proplist.add caseKey archMode properties in
   setArchiveLocal thisRoot arch;
   setArchivePropsLocal thisRoot properties;
   Hashtbl.replace archiveInfoCache thisRoot info;
-  if compatibleCaseMode magic <> `YES then begin
-    let (cacheFilename, _) = archiveName fspath FPCache in
-    let cacheFile = Os.fileInUnisonDir cacheFilename in
-    Fpcache.init true cacheFile;
-    populateCacheFromArchive Path.empty arch;
-    Fpcache.finish ()
-  end;
+  if archMode <> curMode then populateCacheFromArchive fspath arch;
   Lwt.return (Some (hash, magic))
 
 let clearArchiveData thisRoot =
   setArchiveLocal thisRoot NoArchive;
-  setArchivePropsLocal thisRoot Proplist.empty;
+  setArchivePropsLocal thisRoot
+    (Proplist.add caseKey (Case.ops ())#modeDesc Proplist.empty);
   Hashtbl.remove archiveInfoCache thisRoot;
   Lwt.return (Some (0, ""))
 
@@ -629,15 +695,16 @@ let loadArchiveOnRoot: Common.root -> bool -> (int * string) option Lwt.t =
        let (arcName,thisRoot) = archiveName fspath MainArch in
        let arcFspath = Os.fileInUnisonDir arcName in
 
-       if Prefs.read ignoreArchives then
+       if Prefs.read ignoreArchives then begin
+         foundArchives := false;
          clearArchiveData thisRoot
-       else if optimistic then begin
+       end else if optimistic then begin
          let (newArcName, _) = archiveName fspath NewArch in
          if
            (* If the archive is not in a stable state, we need to
               perform archive recovery.  So, the optimistic loading
               fails. *)
-           Sys.file_exists newArcName
+           System.file_exists (Os.fileInUnisonDir newArcName)
              ||
            let (lockFilename, _) = archiveName fspath Lock in
            let lockFile = Os.fileInUnisonDir lockFilename in
@@ -682,7 +749,7 @@ let dumpArchives =
      ^ "after loading it.")
 
 (* For all roots (local or remote), load the archive and cache *)
-let loadArchives (optimistic: bool) : bool Lwt.t =
+let loadArchives (optimistic: bool) =
   Globals.allRootsMap (fun r -> loadArchiveOnRoot r optimistic)
      >>= (fun checksums ->
   let identicals = archivesIdentical checksums in
@@ -704,11 +771,7 @@ let loadArchives (optimistic: bool) : bool Lwt.t =
       ^ "       arXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\n"
       ^ "     where the X's are a hexidecimal number .\n"
       ^ "  c) Run unison again to synchronize from scratch.\n"));
-  checkArchiveCaseSensitivity checksums >>= fun () ->
-  if Prefs.read dumpArchives then
-    Globals.allRootsMap (fun r -> dumpArchiveOnRoot r ())
-     >>= (fun _ -> Lwt.return identicals)
-  else Lwt.return identicals)
+  Lwt.return (identicals, checksums))
 
 
 (*****************************************************************************)
@@ -882,7 +945,7 @@ let doArchiveCrashRecovery () =
               "The archive file is missing on some hosts.";
               "For safety, the remaining copies should be deleted."]
              @ whatToDo @
-             ["Please delete archive files as appropriate and try again\n";
+             ["Please delete archive files as appropriate and try again";
              "or invoke Unison with -ignorearchives flag."]))))
   else begin
     foundArchives := false;
@@ -987,12 +1050,6 @@ let translatePathLocal fspath path =
 let translatePath =
   Remote.registerRootCmd "translatePath"
     (fun (fspath, path) -> Lwt.return (translatePathLocal fspath path))
-
-let isDir fspath path =
-  let fullFspath = Fspath.concat fspath path in
-  try
-    (Fs.stat fullFspath).Unix.LargeFile.st_kind = Unix.S_DIR
-  with Unix.Unix_error _ -> false
 
 (***********************************************************************
                              MOUNT POINTS
@@ -1665,8 +1722,6 @@ let updatePredicates =
 let predKey : (string * string list) list Proplist.key =
   Proplist.register "update predicates"
 let rsrcKey : bool Proplist.key = Proplist.register "rsrc pref"
-let dirStampKey : Props.dirChangedStamp Proplist.key =
-  Proplist.register "unchanged directory stamp"
 
 let checkNoUpdatePredicateChange thisRoot =
   let props = getArchiveProps thisRoot in
@@ -1756,17 +1811,24 @@ let findOnRoot =
 
 let findUpdatesOnPaths pathList =
   Lwt_unix.run
-    (loadArchives true >>= (fun ok ->
-     begin if ok then Lwt.return () else begin
+    (loadArchives true >>= (fun (ok, checksums) ->
+     begin if ok then Lwt.return checksums else begin
        lockArchives () >>= (fun () ->
        Remote.Thread.unwindProtect
          (fun () ->
             doArchiveCrashRecovery () >>= (fun () ->
             loadArchives false))
          (fun _ ->
-            unlockArchives ()) >>= (fun _ ->
-       unlockArchives ()))
-     end end >>= (fun () ->
+            unlockArchives ()) >>= (fun (_, checksums) ->
+       unlockArchives () >>= fun () ->
+       Lwt.return checksums))
+     end end >>= (fun checksums ->
+     checkArchiveCaseSensitivity checksums >>= fun () ->
+     begin if Prefs.read dumpArchives then
+       Globals.allRootsIter (fun r -> dumpArchiveOnRoot r ())
+     else
+       Lwt.return ()
+     end >>= fun () ->
      let t = Trace.startTimer "Collecting changes" in
      Globals.allRootsMapWithWaitingAction (fun r ->
        debug (fun() -> Util.msg "findOnRoot %s\n" (root2string r));
@@ -2248,7 +2310,7 @@ let rec updateSizeRec archive ui =
                 sizeOne children
 
 let updateSize path ui =
-  let rootLocal = List.hd (Globals.rootsInCanonicalOrder ()) in
+  let rootLocal = Globals.localRoot () in
   let fspathLocal = snd rootLocal in
   let root = thisRootsGlobalName fspathLocal in
   let archive = getArchive root in
