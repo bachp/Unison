@@ -1,0 +1,31 @@
+Format-Specification: http://wiki.debian.org/Proposals/CopyrightFormat
+Upstream-Author: Benjamin Pierce <bcpierce@cis.upenn.edu>
+Packaged-By: Robert McQueen <robot101@debian.org>
+Packaged-Date: Fri, 10 Nov 2000 23:12:02 +0000
+Original-Source-Location: http://www.cis.upenn.edu/~bcpierce/unison/download/stable/
+
+Files: *
+Copyright: (C) 200-2009 Benjamin Pierce et al
+License: GPL-2+
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation; either version 2 of
+the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+On Debian systems, the complete text of the GNU General Public
+License can be found in /usr/share/common-licenses/GPL file.
+
+Files: debian/*
+Copyright: (C) 2006-2009 Sylvain Le Gall 
+License: GPL-2+
+
+Files: debian/unison-gtk.svg
+Copyright: (C) 2007 Eric Lavarde
+License: GPL-2+
+

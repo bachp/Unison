@@ -1,0 +1,5 @@
+This package use dpatch for patching the source. 
+
+Please consider reading dpatch manpage to patch the source.
+
+ -- Sylvain Le Gall <gildor@debian.org>  Sun, 22 Jun 2008 23:26:52 +0200
