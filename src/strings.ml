@@ -537,10 +537,8 @@ let docs =
       \n\
       \032  The standard remote shell facility on Unix systems is ssh, which\n\
       \032  provides the same functionality as the older rsh but much better\n\
-      \032  security. Ssh is available from ftp://ftp.cs.hut.fi/pub/ssh/;\n\
-      \032  up-to-date binaries for some architectures can also be found at\n\
-      \032  ftp://ftp.faqs.org/ssh/contrib. See section [1]A.2 for installation\n\
-      \032  instructions for the Windows version.\n\
+      \032  security. Ssh is available from http://www.openssh.org/; See section [1]\n\
+      \032  A.2 for installation instructions for the Windows version.\n\
       \n\
       \032  Running ssh requires some coordination between the client and server\n\
       \032  machines to establish that the client is allowed to invoke commands on\n\
@@ -2678,9 +2676,8 @@ let docs =
       \032           and \"Add to Start Menu.\" You make the call.\n\
       \032        d. You can now delete the directory Foo and its contents.\n\
       \032      Some people have reported problems using Cygwin's ssh with Unison.\n\
-      \032      If you have trouble, you might try this one instead:\n\
-      \032 http://opensores.thebunker.net/pub/mirrors/ssh/contrib/ssh-1.2.14-win32bin.zi\n\
-      p\n\
+      \032      If you have trouble, you might try other ones instead:\n\
+      \032 http://linuxmafia.com/ssh/win32.html\n\
       \032   2. You must set the environment variables HOME and PATH. Ssh will\n\
       \032      create a directory .ssh in the directory given by HOME, so that it\n\
       \032      has a place to keep data like your public and private keys. PATH\n\
