@@ -4299,7 +4299,7 @@ let docs =
       \032      changed. Instead of putting a line of the form\n\
       \032                ignore = <regexp>\n\
       \032      in your profile (.unison/default.prf), you should put:\n\
-      \032                ignore = Regexp <regexp>\n\
+      \032                ignore = Regex <regexp>\n\
       \032      Moreover, two other styles of pattern are also recognized:\n\
       \032                ignore = Name <name>\n\
       \032      matches any path in which one component matches <name>, while\n\
