@@ -1,8 +1,9 @@
-unison (2.40.61-1) UNRELEASED; urgency=low
+unison (2.40.61-1ubuntu1ppa1) lucid; urgency=low
 
-  * Remove unnecessary patches
+  * Create a lucid package for version 2.40.61
+  * Apply some patches from the unison-users mailinglist
 
- -- Pascal Bach <pascal.bach@nextrem.ch> Wed, 02 Feb 2010 17:55:04 +0200
+ -- Pascal Bach <pascal.bach@nextrem.ch>  Thu, 03 Feb 2011 10:19:45 +0100
 
 unison (2.32.52-2) UNRELEASED; urgency=low
 
