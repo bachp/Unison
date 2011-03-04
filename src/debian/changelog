@@ -1,4 +1,4 @@
-unison (2.40.61-1ubuntu1ppa1) lucid; urgency=low
+unison (2.40.61-1pascal1ppa1) lucid; urgency=low
 
   * Create a lucid package for version 2.40.61
   * Apply some patches from the unison-users mailinglist
